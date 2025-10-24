@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "filewatcher123d"
+version = "0.0.1"
+description = "A tool to watch a file and run it in a persistent, auto-reloading IPython kernel with ocp_vscode."
+readme = "README.md"
+requires-python = ">=3.10,<3.14"
+
+dependencies = [
+    "jupyter-client",
+    "jupyter-console",
+    "watchdog",
+    "ipykernel",
+    "build123d",
+    "ocp_vscode",
+]
+
+# This creates the 'fw123d' command
+[project.scripts]
+fw123d = "filewatcher123d.cli:main"
