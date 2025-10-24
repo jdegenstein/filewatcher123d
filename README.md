@@ -22,3 +22,7 @@ Also, the ipython console is still available and allows to inspect any variables
 
 TODO: check that errors in the watched file are properly routed/displayed in the ipython session
 
+How to install (currently only on github):
+```
+pip install git+https://github.com/jdegenstein/filewatcher123d
+```
