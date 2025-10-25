@@ -14,12 +14,14 @@ def _filter_and_print_output(process, suppress_list):
     and prints the lines that are *not* noisy.
     """
     try:
-        for line in iter(process.stdout.readline, ""):
-            line_strip = line.strip()
-            is_noisy = any(s in line_strip for s in suppress_list)
+        for line in iter(process.stdout.readline, ''):
+            # We still strip whitespace so the startswith check is reliable
+            line_strip = line.strip() 
+            
+            is_noisy = any(line_strip.startswith(s) for s in suppress_list)
             if line_strip and not is_noisy:
                 print(f"[ocp_vscode] {line_strip}")
-
+                
     except Exception as e:
         print(f"[Launcher] ocp_vscode filter thread error: {e}")
     finally:
@@ -68,9 +70,9 @@ def main():
     # 3. Start ocp_vscode and its filter
     print("[Launcher] Starting ocp_vscode...")
 
-    OCP_NOISY_STRINGS = ["DEBUG:", "INFO: [ocp_vscode]" "127.0.0.1 - -"]
+    OCP_NOISY_STRINGS = ["DEBUG:", "INFO: [ocp_vscode]", "127.0.0.1 - -"]
 
-    ocp_cmd = [sys.executable, "-m", "ocp_vscode"]
+    ocp_cmd = [sys.executable, "-u", "-m", "ocp_vscode", "--tree_width", "240"]
 
     ocp_process = subprocess.Popen(
         ocp_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1

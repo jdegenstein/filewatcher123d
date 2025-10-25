@@ -3,9 +3,15 @@ from build123d import *
 from ocp_vscode import *
 
 set_port(3939)
-set_defaults(ortho=True, default_edgecolor="#121212", reset_camera=Camera.KEEP, axes=True, axes0=True)
+set_defaults(
+    ortho=True,
+    default_edgecolor="#121212",
+    reset_camera=Camera.KEEP,
+    axes=True,
+    axes0=True,
+)
 
-length, width, thickness = 80.0, 60.0, 80.0
+length, width, thickness = 80.0, 60.0, 99.0
 
 with BuildPart() as ex16_single:
     with BuildSketch(Plane.XZ) as ex16_sk:
@@ -21,7 +27,7 @@ with BuildPart() as ex16:
     mirror(ex16_single.part, about=Plane.XY.offset(width))
     mirror(ex16_single.part, about=Plane.YX.offset(width))
     mirror(ex16_single.part, about=Plane.YZ.offset(width))
-    mirror(ex16_single.part, about=Plane.YZ.offset(-width))  
+    mirror(ex16_single.part, about=Plane.YZ.offset(-width))
 
 set_colormap(ColorMap.seeded(colormap="rgb", alpha=1, seed_value="vscod"))
 # fmt: off
