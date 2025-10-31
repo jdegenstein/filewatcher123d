@@ -6,12 +6,12 @@ A file watcher oriented towards use with build123d and ocp_vscode. What this doe
 3. starts an ocp_vscode process and filters the output (in another thread) to remove excessive messages
 
 Usage examples:
-```py
+```
 fw123d demo_watcher.py
 ```
 
 or alternatively:
-```py
+```
 python -m filewatcher123d.cli demo_watcher.py
 ```
 
