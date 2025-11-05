@@ -5,6 +5,7 @@ import subprocess
 import time
 import threading
 from jupyter_client import KernelManager
+from jupyter_client import BlockingKernelClient
 
 
 def _filter_and_print_output(process, suppress_list):
@@ -14,14 +15,14 @@ def _filter_and_print_output(process, suppress_list):
     and prints the lines that are *not* noisy.
     """
     try:
-        for line in iter(process.stdout.readline, ''):
+        for line in iter(process.stdout.readline, ""):
             # We still strip whitespace so the startswith check is reliable
-            line_strip = line.strip() 
-            
+            line_strip = line.strip()
+
             is_noisy = any(line_strip.startswith(s) for s in suppress_list)
             if line_strip and not is_noisy:
                 print(f"[ocp_vscode] {line_strip}")
-                
+
     except Exception as e:
         print(f"[Launcher] ocp_vscode filter thread error: {e}")
     finally:
@@ -34,12 +35,19 @@ def main():
     and a jupyter console.
     """
 
-    # --- Check for file argument ---
-    if len(sys.argv) != 2:
-        print("Usage: fw123d <file_to_watch.py>")
+    args = sys.argv[1:]
+    use_autoreload = "--autoreload" in args
+
+    if use_autoreload:
+        args.remove("--autoreload")
+        print("[Launcher] Autoreload mode enabled.")
+
+    # We must have exactly one file path left
+    if len(args) != 1:
+        print("Usage: devwatcher [--autoreload] <file_to_watch.py>")
         sys.exit(1)
 
-    file_to_watch = sys.argv[1]
+    file_to_watch = args[0]
     if not os.path.exists(file_to_watch):
         print(f"Error: File not found: {file_to_watch}")
         sys.exit(1)
@@ -72,7 +80,7 @@ def main():
 
     OCP_NOISY_STRINGS = ["DEBUG:", "INFO: [ocp_vscode]", "127.0.0.1 - -"]
 
-    ocp_cmd = [sys.executable, "-u", "-m", "ocp_vscode", "--tree_width", "240"]
+    ocp_cmd = [sys.executable, "-u", "-m", "ocp_vscode"]
 
     ocp_process = subprocess.Popen(
         ocp_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1
@@ -87,10 +95,38 @@ def main():
     filter_thread.start()
     print("[Launcher] ocp_vscode filter thread started.")
 
-    # 4. Give the monitor a moment to connect
+    # 4. Inject autoreload commands (if flagged)
+    if use_autoreload:
+        try:
+            # Connect a client to inject setup commands
+            kc = BlockingKernelClient()
+            kc.load_connection_file(connection_file)
+            kc.start_channels()
+
+            print("[Launcher] Injecting autoreload commands...")
+
+            # Send %load_ext autoreload
+            kc.execute("%load_ext autoreload")
+            kc.get_shell_msg(timeout=5)  # Wait for reply
+
+            # Send %autoreload 2
+            kc.execute("%autoreload 2")
+            kc.get_shell_msg(timeout=5)  # Wait for reply
+
+            # Send a confirmation message to the user's console
+            kc.execute("print('[Launcher] Autoreload extension loaded.')")
+            kc.get_shell_msg(timeout=5)
+
+            kc.stop_channels()
+            print("[Launcher] Autoreload setup complete.")
+
+        except Exception as e:
+            print(f"[Launcher] Error injecting autoreload commands: {e}")
+
+    # 5. Give the monitor a moment to connect
     time.sleep(0.5)
 
-    # 5. Start the jupyter console (REPL) as the main process
+    # 6. Start the jupyter console (REPL) as the main process
     console_cmd = ["jupyter", "console", "--existing", connection_file]
 
     print(f"[Launcher] Handing over to Jupyter console. (File: {file_to_watch})")

@@ -2,6 +2,8 @@
 from build123d import *
 from ocp_vscode import *
 
+import otherparameters
+
 set_port(3939)
 set_defaults(
     ortho=True,
@@ -11,7 +13,7 @@ set_defaults(
     axes0=True,
 )
 
-length, width, thickness = 80.0, 60.0, 99.0
+length, width, thickness = 80.0, 60.0, otherparameters.thickness
 
 with BuildPart() as ex16_single:
     with BuildSketch(Plane.XZ) as ex16_sk:
@@ -29,6 +31,8 @@ with BuildPart() as ex16:
     mirror(ex16_single.part, about=Plane.YZ.offset(width))
     mirror(ex16_single.part, about=Plane.YZ.offset(-width))
 
+
+print(f"Part volume is: {ex16.part.volume}")
 set_colormap(ColorMap.seeded(colormap="rgb", alpha=1, seed_value="vscod"))
 # fmt: off
 show_all(
