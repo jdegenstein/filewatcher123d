@@ -24,11 +24,13 @@ class IPythonRunHandler(FileSystemEventHandler):
 
         self.last_run_time = current_time
 
-        print(f"\n[Monitor] Change detected! Running: %run {self.file_to_watch}")
+        print(f'\n[Monitor] Change detected! %run "{self.file_to_watch}"')
 
         try:
             # Send the execution request
-            msg_id = self.kernel_client.execute(f"%run {self.file_to_watch.absolute()}")
+            msg_id = self.kernel_client.execute(
+                f'%run "{self.file_to_watch.absolute()}"'
+            )
 
             # This loop waits for the "execute_reply" message on the shell channel,
             # while simultaneously processing all "stream" (stdout/stderr)

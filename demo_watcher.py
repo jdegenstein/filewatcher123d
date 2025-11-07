@@ -31,7 +31,6 @@ with BuildPart() as ex16:
     mirror(ex16_single.part, about=Plane.YZ.offset(width))
     mirror(ex16_single.part, about=Plane.YZ.offset(-width))
 
-
 print(f"Part volume is: {ex16.part.volume}")
 set_colormap(ColorMap.seeded(colormap="rgb", alpha=1, seed_value="vscod"))
 # fmt: off
