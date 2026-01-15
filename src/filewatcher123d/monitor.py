@@ -42,15 +42,21 @@ class IPythonRunHandler(FileSystemEventHandler):
                     # This waits for 0.2s for any IO message
                     io_msg = self.kernel_client.get_iopub_msg(timeout=0.2)
 
-                    # Check if it's a stream message (stdout/stderr)
-                    # and that it belongs to our request
-                    if (
-                        io_msg["msg_type"] == "stream"
-                        and io_msg["parent_header"]["msg_id"] == msg_id
-                    ):
+                    # Ensure the message belongs to our current execution request
+                    if io_msg["parent_header"].get("msg_id") != msg_id:
+                        continue
 
+                    msg_type = io_msg["msg_type"]
+                    content = io_msg["content"]
+
+                    if msg_type == "stream":
                         # Print the content directly to the console
-                        print(io_msg["content"]["text"], end="")
+                        print(content["text"], end="")
+
+                    elif msg_type == "error":
+                        # Print the error traceback
+                        # The traceback is a list of strings
+                        print("\n".join(content["traceback"]), file=sys.stderr)
 
                 except queue.Empty:
                     # No IO message, check if the shell reply (execution done) is in

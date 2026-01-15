@@ -24,8 +24,6 @@ Then you need to open the viewer in a browser, should be something like http://1
 From there when you save demo_watcher.py, the watcher should detect any changes and rerun the code in the ipython session.
 Also, the ipython console is still available and allows to inspect any variables / build123d objects interactively.
 
-TODO: check that errors in the watched file are properly routed/displayed in the ipython session
-
 How to install (currently only on github):
 ```
 pip install git+https://github.com/jdegenstein/filewatcher123d
