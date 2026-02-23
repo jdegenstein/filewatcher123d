@@ -4,6 +4,7 @@ import atexit
 import subprocess
 import time
 import threading
+import argparse
 from jupyter_client import KernelManager
 from jupyter_client import BlockingKernelClient
 
@@ -34,20 +35,32 @@ def main():
     Starts an IPython kernel, a watchdog monitor, ocp_vscode,
     and a jupyter console.
     """
+    # Set up argparse for cleaner CLI flag handling and automatic --help output
+    parser = argparse.ArgumentParser(
+        description="""
+A tool to watch a file and run it in a persistent, auto-reloading IPython kernel with ocp_vscode.
+You can use %r from the running console to force re-execution of the watched script.
+"""
+    )
+    parser.add_argument(
+        "-a",
+        "--autoreload",
+        action="store_true",
+        help="Enable the IPython autoreload extension to reload imported modules.",
+    )
+    parser.add_argument(
+        "file_to_watch",
+        help="The path to the Python file you want to watch and execute.",
+    )
 
-    args = sys.argv[1:]
-    use_autoreload = "--autoreload" in args
+    args = parser.parse_args()
+
+    use_autoreload = args.autoreload
+    file_to_watch = args.file_to_watch
 
     if use_autoreload:
-        args.remove("--autoreload")
         print("[Launcher] Autoreload mode enabled.")
 
-    # We must have exactly one file path left
-    if len(args) != 1:
-        print("Usage: devwatcher [--autoreload] <file_to_watch.py>")
-        sys.exit(1)
-
-    file_to_watch = args[0]
     if not os.path.exists(file_to_watch):
         print(f"Error: File not found: {file_to_watch}")
         sys.exit(1)
@@ -61,7 +74,6 @@ def main():
     atexit.register(km.shutdown_kernel, now=True)
 
     # 2. Start the watchdog monitor in a separate process
-
     monitor_cmd = [
         sys.executable,
         "-m",
@@ -95,16 +107,29 @@ def main():
     filter_thread.start()
     print("[Launcher] ocp_vscode filter thread started.")
 
-    # 4. Inject autoreload commands (if flagged)
-    if use_autoreload:
-        try:
-            # Connect a client to inject setup commands
-            kc = BlockingKernelClient()
-            kc.load_connection_file(connection_file)
-            kc.start_channels()
+    # 4. Inject setup commands (custom magics and optionally autoreload)
+    try:
+        # Connect a client to inject setup commands
+        kc = BlockingKernelClient()
+        kc.load_connection_file(connection_file)
+        kc.start_channels()
 
-            print("[Launcher] Injecting autoreload commands...")
+        print("[Launcher] Injecting setup commands...")
 
+        # Inject the %r magic command
+        magic_injection_code = f"""
+from IPython.core.magic import register_line_magic
+from IPython import get_ipython
+
+@register_line_magic
+def r(line):
+    print('\\n[Manual Run] Executing "{file_to_watch}"...')
+    get_ipython().run_line_magic('run', '"{file_to_watch}"')
+"""
+        kc.execute(magic_injection_code)
+        kc.get_shell_msg(timeout=5)  # Wait for reply
+
+        if use_autoreload:
             # Send %load_ext autoreload
             kc.execute("%load_ext autoreload")
             kc.get_shell_msg(timeout=5)  # Wait for reply
@@ -117,11 +142,13 @@ def main():
             kc.execute("print('[Launcher] Autoreload extension loaded.')")
             kc.get_shell_msg(timeout=5)
 
-            kc.stop_channels()
-            print("[Launcher] Autoreload setup complete.")
+        kc.stop_channels()
+        print(
+            "[Launcher] Setup complete. You can use `%r` in the console to force re-run."
+        )
 
-        except Exception as e:
-            print(f"[Launcher] Error injecting autoreload commands: {e}")
+    except Exception as e:
+        print(f"[Launcher] Error injecting setup commands: {e}")
 
     # 5. Give the monitor a moment to connect
     time.sleep(0.5)
