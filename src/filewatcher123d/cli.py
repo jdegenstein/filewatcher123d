@@ -2,6 +2,7 @@ import sys
 import os
 import atexit
 import subprocess
+import platform
 import time
 import threading
 import argparse
@@ -28,6 +29,20 @@ def _filter_and_print_output(process, suppress_list):
         print(f"[Launcher] ocp_vscode filter thread error: {e}")
     finally:
         process.stdout.close()
+
+
+_system = platform.system()
+
+
+def _run_subproc(*args, **kwargs):
+    if _system == "Windows":
+        proc = subprocess.Popen(
+            *args, creationflags=subprocess.CREATE_NEW_PROCESS_GROUP, **kwargs
+        )
+    else:
+        proc = subprocess.Popen(*args, preexec_fn=os.setsid, **kwargs)
+    atexit.register(proc.terminate)
+    return proc
 
 
 def main():
@@ -84,8 +99,7 @@ You can use %r from the running console to force re-execution of the watched scr
     # -------------------------------
 
     print("[Launcher] Starting monitor process...")
-    monitor_process = subprocess.Popen(monitor_cmd)
-    atexit.register(monitor_process.terminate)
+    _run_subproc(monitor_cmd)
 
     # 3. Start ocp_vscode and its filter
     print("[Launcher] Starting ocp_vscode...")
@@ -94,10 +108,9 @@ You can use %r from the running console to force re-execution of the watched scr
 
     ocp_cmd = [sys.executable, "-u", "-m", "ocp_vscode"]
 
-    ocp_process = subprocess.Popen(
+    _run_subproc(
         ocp_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1
     )
-    atexit.register(ocp_process.terminate)
 
     filter_thread = threading.Thread(
         target=_filter_and_print_output,
@@ -159,7 +172,15 @@ def r(line):
     print(f"[Launcher] Handing over to Jupyter console. (File: {file_to_watch})")
     print("---------------------------------------------------------------")
 
-    subprocess.run(console_cmd)
+    ipython_proc = _run_subproc(console_cmd)
+    while True:
+        try:
+            ipython_proc.wait()
+            break
+        except KeyboardInterrupt:
+            # Note: we must go through the kernel manager for an interrupt.
+            # Sending SIGINT ourselves will not work
+            km.interrupt_kernel()
 
     print("\n---------------------------------------------------------------")
     print("[Launcher] Console exited. Shutting down all processes...")
