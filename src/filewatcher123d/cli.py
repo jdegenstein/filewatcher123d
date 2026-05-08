@@ -154,7 +154,7 @@ def r(line):
     time.sleep(0.5)
 
     # 6. Start the jupyter console (REPL) as the main process
-    console_cmd = ["jupyter", "console", "--existing", connection_file]
+    console_cmd = [sys.executable, "-m", "jupyter_console", "--existing", connection_file]
 
     print(f"[Launcher] Handing over to Jupyter console. (File: {file_to_watch})")
     print("---------------------------------------------------------------")
