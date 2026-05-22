@@ -5,8 +5,75 @@ import subprocess
 import time
 import threading
 import argparse
+import glob
 from jupyter_client import KernelManager
 from jupyter_client import BlockingKernelClient
+
+
+def interactive_file_prompt():
+    print("No file specified.")
+    py_files = glob.glob("*.py")
+
+    if py_files:
+        print("Found the following Python files in the current directory:")
+        for i, f in enumerate(py_files):
+            print(f"  [{i+1}] {f}")
+        print(f"  [{len(py_files)+1}] Create a new file")
+    else:
+        print("No .py files found in the current directory.")
+
+    while True:
+        print("-" * 40)
+        choice = input(
+            "Select a number, or type a file path directly [default: main.py]: "
+        ).strip()
+
+        if not choice:
+            choice = "main.py"
+
+        # 1. Handle Menu Selection
+        if choice.isdigit() and py_files:
+            idx = int(choice) - 1
+            if 0 <= idx < len(py_files):
+                return os.path.abspath(py_files[idx])
+            elif idx == len(py_files):
+                choice = input("Enter new filename: ").strip()
+                if not choice:
+                    choice = "main.py"
+                if not choice.endswith(".py"):
+                    choice += ".py"
+
+        # 2. Path canonicalization (handles ~ and converts to absolute path)
+        choice = os.path.expanduser(choice)
+        abs_path = os.path.abspath(choice)
+
+        # 3. File validation and creation
+        if not os.path.exists(abs_path):
+            create = (
+                input(
+                    f"Warning: '{abs_path}' does not exist. Create it with a template? [Y/n]: "
+                )
+                .strip()
+                .lower()
+            )
+            if create in ["", "y", "yes"]:
+
+                # Ensure the parent directories exist before trying to create the file
+                parent_dir = os.path.dirname(abs_path)
+                if parent_dir:
+                    os.makedirs(parent_dir, exist_ok=True)
+
+                with open(abs_path, "w") as f:
+                    f.write(
+                        "from build123d import *\nfrom ocp_vscode import *\n\nset_port(3939)\n\nshow(Box(1,1,1))\n"
+                    )
+                print(f"Created {abs_path}.")
+                return abs_path
+            else:
+                print("Please select an existing file or provide a valid path.")
+                continue
+
+        return abs_path
 
 
 def _filter_and_print_output(process, suppress_list):
@@ -48,15 +115,22 @@ You can use %r from the running console to force re-execution of the watched scr
         action="store_true",
         help="Enable the IPython autoreload extension to reload imported modules.",
     )
+
+    # Change file_to_watch to be optional
     parser.add_argument(
         "file_to_watch",
+        nargs="?",
         help="The path to the Python file you want to watch and execute.",
     )
 
     args = parser.parse_args()
-
     use_autoreload = args.autoreload
-    file_to_watch = args.file_to_watch
+
+    # Trigger the interactive prompt if omitted
+    if not args.file_to_watch:
+        file_to_watch = interactive_file_prompt()
+    else:
+        file_to_watch = os.path.abspath(os.path.expanduser(args.file_to_watch))
 
     if use_autoreload:
         print("[Launcher] Autoreload mode enabled.")
@@ -154,7 +228,13 @@ def r(line):
     time.sleep(0.5)
 
     # 6. Start the jupyter console (REPL) as the main process
-    console_cmd = [sys.executable, "-m", "jupyter_console", "--existing", connection_file]
+    console_cmd = [
+        sys.executable,
+        "-m",
+        "jupyter_console",
+        "--existing",
+        connection_file,
+    ]
 
     print(f"[Launcher] Handing over to Jupyter console. (File: {file_to_watch})")
     print("---------------------------------------------------------------")
