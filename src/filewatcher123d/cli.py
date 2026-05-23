@@ -8,6 +8,7 @@ import argparse
 import glob
 from jupyter_client import KernelManager
 from jupyter_client import BlockingKernelClient
+from pathlib import Path
 
 
 def interactive_file_prompt():
@@ -139,6 +140,24 @@ You can use %r from the running console to force re-execution of the watched scr
         print(f"Error: File not found: {file_to_watch}")
         sys.exit(1)
 
+    # 0. Start ocp_vscode and its filter IMMEDIATELY (Background loading)
+    print("[Launcher] Starting ocp_vscode in the background...")
+    OCP_NOISY_STRINGS = ["DEBUG:", "INFO: [ocp_vscode]", "127.0.0.1 - -"]
+    ocp_cmd = [sys.executable, "-u", "-m", "ocp_vscode"]
+
+    ocp_process = subprocess.Popen(
+        ocp_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1
+    )
+    atexit.register(ocp_process.terminate)
+
+    filter_thread = threading.Thread(
+        target=_filter_and_print_output,
+        args=(ocp_process, OCP_NOISY_STRINGS),
+        daemon=True,
+    )
+    filter_thread.start()
+    print("[Launcher] ocp_vscode filter thread started.")
+
     # 1. Start the IPython kernel
     print("[Launcher] Starting IPython kernel...")
     km = KernelManager()
@@ -161,27 +180,7 @@ You can use %r from the running console to force re-execution of the watched scr
     monitor_process = subprocess.Popen(monitor_cmd)
     atexit.register(monitor_process.terminate)
 
-    # 3. Start ocp_vscode and its filter
-    print("[Launcher] Starting ocp_vscode...")
-
-    OCP_NOISY_STRINGS = ["DEBUG:", "INFO: [ocp_vscode]", "127.0.0.1 - -"]
-
-    ocp_cmd = [sys.executable, "-u", "-m", "ocp_vscode"]
-
-    ocp_process = subprocess.Popen(
-        ocp_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1
-    )
-    atexit.register(ocp_process.terminate)
-
-    filter_thread = threading.Thread(
-        target=_filter_and_print_output,
-        args=(ocp_process, OCP_NOISY_STRINGS),
-        daemon=True,
-    )
-    filter_thread.start()
-    print("[Launcher] ocp_vscode filter thread started.")
-
-    # 4. Inject setup commands (custom magics and optionally autoreload)
+    # 3. Inject setup commands (custom magics and optionally autoreload)
     try:
         # Connect a client to inject setup commands
         kc = BlockingKernelClient()
@@ -190,6 +189,9 @@ You can use %r from the running console to force re-execution of the watched scr
 
         print("[Launcher] Injecting setup commands...")
 
+        # Convert to a POSIX-style path (forward slashes)
+        safe_file_path = Path(file_to_watch).as_posix()
+
         # Inject the %r magic command
         magic_injection_code = f"""
 from IPython.core.magic import register_line_magic
@@ -197,8 +199,8 @@ from IPython import get_ipython
 
 @register_line_magic
 def r(line):
-    print('\\n[Manual Run] Executing "{file_to_watch}"...')
-    get_ipython().run_line_magic('run', '"{file_to_watch}"')
+    print('\\n[Manual Run] Executing "{safe_file_path}"...')
+    get_ipython().run_line_magic('run', '"{safe_file_path}"')
 """
         kc.execute(magic_injection_code)
         kc.get_shell_msg(timeout=5)  # Wait for reply
@@ -224,10 +226,10 @@ def r(line):
     except Exception as e:
         print(f"[Launcher] Error injecting setup commands: {e}")
 
-    # 5. Give the monitor a moment to connect
+    # 4. Give the monitor a moment to connect
     time.sleep(0.5)
 
-    # 6. Start the jupyter console (REPL) as the main process
+    # 5. Start the jupyter console (REPL) as the main process
     console_cmd = [
         sys.executable,
         "-m",
