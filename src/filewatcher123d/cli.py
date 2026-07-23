@@ -172,6 +172,7 @@ You can use %r from the running console to force re-execution of the watched scr
         "-m",
         "filewatcher123d.monitor",
         file_to_watch,
+        "--connection-file",
         connection_file,
     ]
     # -------------------------------

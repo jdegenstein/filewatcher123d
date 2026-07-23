@@ -1,119 +1,143 @@
+import argparse
 import sys
-import os
-from pathlib import Path
 import time
-import queue
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
+from pathlib import Path
+from typing import Optional
+
 from jupyter_client import BlockingKernelClient
+from watchdog.events import FileSystemEventHandler
+from watchdog.observers import Observer
 
 
 class IPythonRunHandler(FileSystemEventHandler):
-    """A handler that executes a file in an IPython kernel on modification."""
+    """Watchdog event handler that detects changes to a target file and
 
-    def __init__(self, file_to_watch, kernel_client):
-        self.file_to_watch = file_to_watch
+    triggers re-execution in a connected IPython kernel.
+    """
+
+    def __init__(
+        self,
+        file_to_watch: Path,
+        kernel_client: BlockingKernelClient,
+        debounce_seconds: float = 0.15,
+    ):
+        super().__init__()
+        self.file_to_watch = Path(file_to_watch).resolve()
         self.kernel_client = kernel_client
-        self.last_run_time = 0
-        print(f"[Monitor] Monitoring {self.file_to_watch.absolute()}...")
+        self.debounce_seconds = debounce_seconds
+        self._last_trigger_time: float = 0.0
 
-    def execute_in_ipython(self):
-        current_time = time.time()
-        if current_time - self.last_run_time < 1:
-            return
-
-        self.last_run_time = current_time
-
-        print(f'\n[Monitor] Change detected! %run "{self.file_to_watch}"')
-
-        try:
-            # Send the execution request
-            msg_id = self.kernel_client.execute(
-                f'%run "{self.file_to_watch.absolute()}"'
-            )
-
-            # This loop waits for the "execute_reply" message on the shell channel,
-            # while simultaneously processing all "stream" (stdout/stderr)
-            # messages on the iopub channel.
-
-            while True:
-                try:
-                    # Check for print statements (or errors)
-                    # This waits for 0.2s for any IO message
-                    io_msg = self.kernel_client.get_iopub_msg(timeout=0.2)
-
-                    # Ensure the message belongs to our current execution request
-                    if io_msg["parent_header"].get("msg_id") != msg_id:
-                        continue
-
-                    msg_type = io_msg["msg_type"]
-                    content = io_msg["content"]
-
-                    if msg_type == "stream":
-                        # Print the content directly to the console
-                        print(content["text"], end="")
-
-                    elif msg_type == "error":
-                        # Print the error traceback
-                        # The traceback is a list of strings
-                        print("\n".join(content["traceback"]), file=sys.stderr)
-
-                except queue.Empty:
-                    # No IO message, check if the shell reply (execution done) is in
-                    try:
-                        reply_msg = self.kernel_client.get_shell_msg(timeout=0)
-                        if reply_msg["parent_header"]["msg_id"] == msg_id:
-                            # We got the final "all done" reply, break the loop
-                            break
-                    except queue.Empty:
-                        # No shell reply yet, just loop again
-                        pass
-
-            # Flush stdout to ensure all prints are shown
-            sys.stdout.flush()
-
-        except Exception as e:
-            print(f"\n[Monitor] Error sending command: {e}")
-
-        # Redraw the jupyter-console prompt
-        print(f"\n>>> ", end="", flush=True)
-
-    def on_modified(self, event):
+    def on_any_event(self, event):
         if event.is_directory:
             return
-        if Path(event.src_path).absolute() == self.file_to_watch.absolute():
-            self.execute_in_ipython()
 
-
-if __name__ == "__main__":
-
-    if len(sys.argv) != 3:
-        print(
-            "Usage: python -m filewatcher123d.monitor <file_to_watch.py> <kernel_connection_file.json>"
+        # Resolve paths to handle relative paths, symlinks, and OS path normalization
+        src = Path(event.src_path).resolve()
+        dest = (
+            Path(event.dest_path).resolve()
+            if getattr(event, "dest_path", None)
+            else None
         )
-        sys.exit(1)
 
-    file_to_watch = sys.argv[1]
-    connection_file_path = sys.argv[2]
+        # Trigger on direct modifications or atomic save renames (e.g. Geany, Vim, VS Code)
+        if src == self.file_to_watch or dest == self.file_to_watch:
+            now = time.time()
+            if now - self._last_trigger_time >= self.debounce_seconds:
+                self._last_trigger_time = now
+                self._trigger_execution()
 
-    # Set up the kernel client
-    client = BlockingKernelClient()
-    client.load_connection_file(connection_file_path)
-    client.start_channels()
-    print("[Monitor] Successfully connected to IPython kernel.")
+    def _trigger_execution(self):
+        """Send a %run magic command to the IPython kernel to re-execute the target file."""
+        code = f'%run -i "{self.file_to_watch}"'
+        print(
+            f"\n[filewatcher123d] Change detected. Executing: {self.file_to_watch.name}..."
+        )
+        try:
+            self.kernel_client.execute(code)
+        except Exception as err:
+            print(
+                f"[filewatcher123d] Error executing code in kernel: {err}",
+                file=sys.stderr,
+            )
 
-    # Set up watchdog
-    watch_pathobj = Path(file_to_watch)
-    watch_directory = watch_pathobj.parent
-    event_handler = IPythonRunHandler(watch_pathobj, client)
+
+def start_monitoring(
+    file_to_watch: Path,
+    connection_file: Optional[Path] = None,
+    debounce_seconds: float = 0.15,
+):
+    """Connect to the IPython kernel, set up the directory watchdog, and block until interrupted."""
+    file_path = Path(file_to_watch).resolve()
+    if not file_path.exists():
+        raise FileNotFoundError(f"Target file does not exist: {file_path}")
+
+    # Initialize IPython Kernel Client connection
+    kc = BlockingKernelClient()
+    if connection_file:
+        kc.load_connection_file(str(connection_file))
+    else:
+        kc.load_connection_file()
+    kc.start_channels()
+
+    handler = IPythonRunHandler(
+        file_to_watch=file_path,
+        kernel_client=kc,
+        debounce_seconds=debounce_seconds,
+    )
+
     observer = Observer()
-    observer.schedule(event_handler, watch_directory, recursive=False)
+    # Watch the parent directory so watchdog catches FileMovedEvent from atomic saves
+    watch_dir = file_path.parent
+    observer.schedule(handler, path=str(watch_dir), recursive=False)
     observer.start()
+
+    print(f"[filewatcher123d] Monitoring '{file_path.name}' in '{watch_dir}'...")
 
     try:
         while True:
-            time.sleep(1)
+            time.sleep(0.5)
     except KeyboardInterrupt:
+        print("\n[filewatcher123d] Stopping file monitor...")
         observer.stop()
-        client.stop_channels()
-    observer.join()
+    finally:
+        observer.join()
+        kc.stop_channels()
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Monitor a Python script and re-execute it in an active IPython kernel on save."
+    )
+    parser.add_argument(
+        "file_to_watch",
+        type=Path,
+        help="Path to the Python script to monitor.",
+    )
+    parser.add_argument(
+        "--connection-file",
+        type=Path,
+        default=None,
+        help="Path to the IPython kernel connection JSON file.",
+    )
+    parser.add_argument(
+        "--debounce",
+        type=float,
+        default=0.15,
+        help="Debounce window in seconds (default: 0.15).",
+    )
+
+    args = parser.parse_args()
+
+    try:
+        start_monitoring(
+            file_to_watch=args.file_to_watch,
+            connection_file=args.connection_file,
+            debounce_seconds=args.debounce,
+        )
+    except Exception as exc:
+        print(f"[filewatcher123d] Error: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

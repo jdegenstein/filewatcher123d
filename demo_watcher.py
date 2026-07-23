@@ -8,7 +8,6 @@ set_port(3939)
 set_defaults(
     ortho=True,
     default_edgecolor="#121212",
-    reset_camera=Camera.KEEP,
     axes=True,
     axes0=True,
 )
@@ -38,6 +37,6 @@ show_all(
     classes = [BuildPart, BuildSketch, BuildLine, ],  # comment to show all objects
     include = ["", ],
     exclude = ["", ],
-    show_sketch_local = False,
+    show_locals = False,
     helper_scale = 1,  # controls size of e.g. planes and axes
 )  # fmt: on
