@@ -9,7 +9,7 @@ If you are new to the world of Code-CAD (using code to generate 3D CAD models), 
 * **Instant Visual Feedback:** Every time you save your Python file, your 3D model automatically updates in your web browser. No need to switch windows and manually re-run your script.
 * **Lightning Fast Executions:** Standard Python scripts load heavy CAD libraries from scratch every single time they run. This tool keeps a Python session open in the background, meaning your script re-runs instantly without the heavy startup delay.
 * **Interactive Inspection:** Because your code runs in a persistent console, you don't just get a visual model -- you get an interactive terminal. After your script runs, you can type commands directly into the terminal to inspect variables, measure distances, or test new `build123d` operations on the fly.
-* **Zero-Config Viewer:** It automatically handles the background server needed to display your 3D models (using `ocp_vscode`), keeping your focus on the code.
+* **Zero-Config Viewer:** It automatically handles the background server needed to display your 3D models (using `ocp_viewer`), keeping your focus on the code.
 
 ## How it Works
 
@@ -17,7 +17,7 @@ Under the hood, `filewatcher123d` acts as an orchestra conductor for three power
 
 1. **IPython (Jupyter Console):** It starts an interactive Python session that holds your variables and CAD libraries in memory.
 2. **Watchdog:** It silently monitors your specific Python file (and optionally its dependencies) for any "Save" events.
-3. **OCP VSCode Server:** It launches a local web server that receives the 3D geometry from your code and renders it in your browser. 
+3. **ocp_viewer server:** It launches a local web server that receives the 3D geometry from your code and renders it in your browser. 
 
 When a save is detected, the watcher tells IPython to re-run your code, which immediately updates the web viewer. It also filters out unnecessary background noise in the console so you only see what matters.
 
@@ -42,7 +42,7 @@ fw123d demo_watcher.py
 *(Alternatively, you can run: `python -m filewatcher123d.cli demo_watcher.py`)*
 
 Once the command is running, open your web browser and navigate to the viewer:
-**[http://127.0.0.1:3939/viewer](http://127.0.0.1:3939/viewer)**
+**[http://127.0.0.1:3939](http://127.0.0.1:3939)**
 
 Now, whenever you save changes to `demo_watcher.py`, the browser will automatically refresh with your updated 3D model. The terminal where you started the command is now an active IPython console -- feel free to type Python commands there to interact with your code!
 

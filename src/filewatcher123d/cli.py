@@ -66,7 +66,7 @@ def interactive_file_prompt():
 
                 with open(abs_path, "w") as f:
                     f.write(
-                        "from build123d import *\nfrom ocp_vscode import *\n\nset_port(3939)\n\nshow(Box(1,1,1))\n"
+                        "from build123d import *\nfrom ocp_viewer import *\n\nset_port(3939)\n\nshow(Box(1,1,1))\n"
                     )
                 print(f"Created {abs_path}.")
                 return abs_path
@@ -90,23 +90,23 @@ def _filter_and_print_output(process, suppress_list):
 
             is_noisy = any(line_strip.startswith(s) for s in suppress_list)
             if line_strip and not is_noisy:
-                print(f"[ocp_vscode] {line_strip}")
+                print(f"[ocp_viewer] {line_strip}")
 
     except Exception as e:
-        print(f"[Launcher] ocp_vscode filter thread error: {e}")
+        print(f"[Launcher] ocp_viewer filter thread error: {e}")
     finally:
         process.stdout.close()
 
 
 def main():
     """
-    Starts an IPython kernel, a watchdog monitor, ocp_vscode,
+    Starts an IPython kernel, a watchdog monitor, ocp_viewer,
     and a jupyter console.
     """
     # Set up argparse for cleaner CLI flag handling and automatic --help output
     parser = argparse.ArgumentParser(
         description="""
-A tool to watch a file and run it in a persistent, auto-reloading IPython kernel with ocp_vscode.
+A tool to watch a file and run it in a persistent, auto-reloading IPython kernel with ocp_viewer.
 You can use %r from the running console to force re-execution of the watched script.
 """
     )
@@ -140,10 +140,10 @@ You can use %r from the running console to force re-execution of the watched scr
         print(f"Error: File not found: {file_to_watch}")
         sys.exit(1)
 
-    # 0. Start ocp_vscode and its filter IMMEDIATELY (Background loading)
-    print("[Launcher] Starting ocp_vscode in the background...")
-    OCP_NOISY_STRINGS = ["DEBUG:", "INFO: [ocp_vscode]", "127.0.0.1 - -"]
-    ocp_cmd = [sys.executable, "-u", "-m", "ocp_vscode"]
+    # 0. Start ocp_viewer and its filter IMMEDIATELY (Background loading)
+    print("[Launcher] Starting ocp_viewer in the background...")
+    OCP_NOISY_STRINGS = ["DEBUG:", "INFO: [ocp_viewer]", "127.0.0.1 - -"]
+    ocp_cmd = [sys.executable, "-u", "-m", "ocp_viewer"]
 
     ocp_process = subprocess.Popen(
         ocp_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1
@@ -156,7 +156,7 @@ You can use %r from the running console to force re-execution of the watched scr
         daemon=True,
     )
     filter_thread.start()
-    print("[Launcher] ocp_vscode filter thread started.")
+    print("[Launcher] ocp_viewer filter thread started.")
 
     # 1. Start the IPython kernel
     print("[Launcher] Starting IPython kernel...")
