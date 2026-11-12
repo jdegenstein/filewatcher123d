@@ -27,24 +27,24 @@ class IPythonRunHandler(FileSystemEventHandler):
         self.debounce_seconds = debounce_seconds
         self._last_trigger_time: float = 0.0
 
-    def on_any_event(self, event):
-        if event.is_directory:
-            return
+    def on_modified(self, event):
+        if not event.is_directory and Path(event.src_path).resolve() == self.file_to_watch:
+            self._debounced_trigger()
 
-        # Resolve paths to handle relative paths, symlinks, and OS path normalization
-        src = Path(event.src_path).resolve()
-        dest = (
-            Path(event.dest_path).resolve()
-            if getattr(event, "dest_path", None)
-            else None
-        )
+    def on_created(self, event):
+        if not event.is_directory and Path(event.src_path).resolve() == self.file_to_watch:
+            self._debounced_trigger()
 
-        # Trigger on direct modifications or atomic save renames (e.g. Geany, Vim, VS Code)
-        if src == self.file_to_watch or dest == self.file_to_watch:
-            now = time.time()
-            if now - self._last_trigger_time >= self.debounce_seconds:
-                self._last_trigger_time = now
-                self._trigger_execution()
+    def on_moved(self, event):
+        dest = getattr(event, "dest_path", None)
+        if not event.is_directory and dest and Path(dest).resolve() == self.file_to_watch:
+            self._debounced_trigger()
+
+    def _debounced_trigger(self):
+        now = time.monotonic()
+        if now - self._last_trigger_time >= self.debounce_seconds:
+            self._last_trigger_time = now
+            self._trigger_execution()
 
     def _trigger_execution(self):
         """Send a %run magic command to the IPython kernel to re-execute the target file."""
@@ -59,7 +59,6 @@ class IPythonRunHandler(FileSystemEventHandler):
                 f"[filewatcher123d] Error executing code in kernel: {err}",
                 file=sys.stderr,
             )
-
 
 def start_monitoring(
     file_to_watch: Path,
