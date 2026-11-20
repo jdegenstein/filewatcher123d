@@ -11,7 +11,21 @@ from jupyter_client import BlockingKernelClient
 from pathlib import Path
 
 
-def interactive_file_prompt():
+def _valid_port(value: str) -> int:
+    try:
+        port = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(
+            f"Invalid port: {value!r} (must be an integer)"
+        )
+    if not (1 <= port <= 65535):
+        raise argparse.ArgumentTypeError(
+            f"Port must be between 1 and 65535, got {port}"
+        )
+    return port
+
+
+def interactive_file_prompt(port=3939):
     print("No file specified.")
     py_files = glob.glob("*.py")
 
@@ -66,7 +80,7 @@ def interactive_file_prompt():
 
                 with open(abs_path, "w") as f:
                     f.write(
-                        "from build123d import *\nfrom ocp_viewer import *\n\nset_port(3939)\n\nshow(Box(1,1,1))\n"
+                        f"from build123d import *\nfrom ocp_viewer import *\n\nset_port({port})\n\nshow(Box(1,1,1))\n"
                     )
                 print(f"Created {abs_path}.")
                 return abs_path
@@ -116,6 +130,13 @@ You can use %r from the running console to force re-execution of the watched scr
         action="store_true",
         help="Enable the IPython autoreload extension to reload imported modules.",
     )
+    parser.add_argument(
+        "-p",
+        "--port",
+        type=_valid_port,
+        default=3939,
+        help="Port for the ocp_viewer server (default: 3939).",
+    )
 
     # Change file_to_watch to be optional
     parser.add_argument(
@@ -126,10 +147,11 @@ You can use %r from the running console to force re-execution of the watched scr
 
     args = parser.parse_args()
     use_autoreload = args.autoreload
+    port = args.port
 
     # Trigger the interactive prompt if omitted
     if not args.file_to_watch:
-        file_to_watch = interactive_file_prompt()
+        file_to_watch = interactive_file_prompt(port=port)
     else:
         file_to_watch = os.path.abspath(os.path.expanduser(args.file_to_watch))
 
@@ -141,9 +163,9 @@ You can use %r from the running console to force re-execution of the watched scr
         sys.exit(1)
 
     # 0. Start ocp_viewer and its filter IMMEDIATELY (Background loading)
-    print("[Launcher] Starting ocp_viewer in the background...")
+    print(f"[Launcher] Starting ocp_viewer on port {port} in the background...")
     OCP_NOISY_STRINGS = ["DEBUG:", "INFO: [ocp_viewer]", "127.0.0.1 - -"]
-    ocp_cmd = [sys.executable, "-u", "-m", "ocp_viewer"]
+    ocp_cmd = [sys.executable, "-u", "-m", "ocp_viewer", "--port", str(port)]
 
     ocp_process = subprocess.Popen(
         ocp_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1
@@ -160,8 +182,10 @@ You can use %r from the running console to force re-execution of the watched scr
 
     # 1. Start the IPython kernel
     print("[Launcher] Starting IPython kernel...")
+    kernel_env = os.environ.copy()
+    kernel_env["OCP_PORT"] = str(port)
     km = KernelManager()
-    km.start_kernel()
+    km.start_kernel(env=kernel_env)
     connection_file = km.connection_file
     print(f"[Launcher] Kernel started. Connection file: {connection_file}")
     atexit.register(km.shutdown_kernel, now=True)

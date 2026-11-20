@@ -55,6 +55,15 @@ If your main script imports other Python files (like a file containing configura
 fw123d -a demo_watcher.py
 ```
 
+**Custom Viewer Port (`-p` / `--port` flag)**
+To work on multiple models at the same time, specify a custom port for the `ocp_viewer` server:
+
+```bash
+fw123d --port 12345 demo_watcher.py
+```
+
+Then open your browser to `http://127.0.0.1:12345`. `filewatcher123d` automatically sets `OCP_PORT` in the IPython kernel so `ocp_viewer` connects to that port without prompting (note: if your script explicitly calls `set_port(...)`, remove or update it to match).
+
 **Manual Execution (`%r`)**
 If you ever want to force your watched file to re-run without actually saving a change to the file, simply type the special magic command `%r` into the running console and press Enter.
 
